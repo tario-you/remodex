@@ -284,6 +284,17 @@ private struct SettingsSubscriptionCard: View {
     @State private var isPresentingPaywall = false
 
     var body: some View {
+        if AppEnvironment.isSelfHostBuild {
+            SettingsCard(title: "Self-host build") {
+                Text("Subscription gating and RevenueCat are disabled for this local self-host build.")
+                    .font(AppFont.caption())
+                    .foregroundStyle(.secondary)
+
+                Text("Use BuildSupport/PrivateOverrides.xcconfig to keep relay defaults and other local values out of Git.")
+                    .font(AppFont.caption())
+                    .foregroundStyle(.secondary)
+            }
+        } else {
         SettingsCard(title: "Remodex Pro") {
             HStack {
                 Text("Status")
@@ -321,6 +332,7 @@ private struct SettingsSubscriptionCard: View {
         }
         .sheet(isPresented: $isPresentingPaywall) {
             RevenueCatPaywallView()
+        }
         }
     }
 }

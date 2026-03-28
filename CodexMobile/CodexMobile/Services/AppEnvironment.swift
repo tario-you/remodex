@@ -8,6 +8,7 @@ import Foundation
 
 enum AppEnvironment {
     private static let defaultRelayURLInfoPlistKey = "PHODEX_DEFAULT_RELAY_URL"
+    private static let selfHostBuildInfoPlistKey = "REMODEX_SELF_HOST_BUILD"
     private static let revenueCatPublicAPIKeyInfoPlistKey = "REVENUECAT_PUBLIC_API_KEY"
     private static let revenueCatEntitlementNameInfoPlistKey = "REVENUECAT_ENTITLEMENT_NAME"
     private static let revenueCatDefaultOfferingIDInfoPlistKey = "REVENUECAT_DEFAULT_OFFERING_ID"
@@ -21,6 +22,12 @@ enum AppEnvironment {
             return infoURL
         }
         return defaultRelayURLString
+    }
+
+    // Local self-host builds can bypass hosted subscription checks while keeping
+    // the default upstream behavior for normal signed builds.
+    static var isSelfHostBuild: Bool {
+        resolvedBool(forInfoPlistKey: selfHostBuildInfoPlistKey) ?? false
     }
 
     // Reads the public RevenueCat key shipped with the client build.
@@ -64,5 +71,24 @@ private extension AppEnvironment {
         }
 
         return trimmedValue
+    }
+
+    static func resolvedBool(forInfoPlistKey key: String) -> Bool? {
+        if let rawValue = Bundle.main.object(forInfoDictionaryKey: key) as? Bool {
+            return rawValue
+        }
+
+        guard let rawValue = resolvedString(forInfoPlistKey: key) else {
+            return nil
+        }
+
+        switch rawValue.lowercased() {
+        case "1", "true", "yes":
+            return true
+        case "0", "false", "no":
+            return false
+        default:
+            return nil
+        }
     }
 }

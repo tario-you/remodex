@@ -69,6 +69,9 @@ final class SubscriptionService {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        if enableSelfHostAccessIfNeeded() {
+            return
+        }
         restoreCachedStateIfAvailable()
         startCustomerInfoObserverIfConfigured()
     }
@@ -79,6 +82,10 @@ final class SubscriptionService {
 
     // Bootstraps subscription state once at launch or from the recovery retry action.
     func bootstrap() async {
+        guard !enableSelfHostAccessIfNeeded() else {
+            return
+        }
+
         guard !isBootstrapping else {
             return
         }
@@ -112,6 +119,10 @@ final class SubscriptionService {
 
     // Refreshes the current subscription state without re-entering the blocking bootstrap UI.
     func refreshCustomerInfoSilently() async {
+        guard !enableSelfHostAccessIfNeeded() else {
+            return
+        }
+
         guard !isBootstrapping, bootstrapState != .loading else {
             return
         }
@@ -132,6 +143,10 @@ final class SubscriptionService {
 
     // Reads the current RevenueCat offerings and normalizes the package list for SwiftUI.
     func loadOfferings() async {
+        guard !enableSelfHostAccessIfNeeded() else {
+            return
+        }
+
         startCustomerInfoObserverIfConfigured()
         isLoading = true
         lastErrorMessage = nil
@@ -143,6 +158,10 @@ final class SubscriptionService {
 
     // Starts a purchase flow for the selected package and refreshes entitlements on success.
     func purchase(_ option: SubscriptionPackageOption) async {
+        guard !enableSelfHostAccessIfNeeded() else {
+            return
+        }
+
         guard !isPurchasing else {
             return
         }
@@ -178,6 +197,10 @@ final class SubscriptionService {
 
     // Restores store purchases and then re-checks the Pro entitlement state.
     func restorePurchases() async {
+        guard !enableSelfHostAccessIfNeeded() else {
+            return
+        }
+
         guard !isRestoring else {
             return
         }
@@ -205,7 +228,36 @@ final class SubscriptionService {
 }
 
 private extension SubscriptionService {
+    @discardableResult
+    func enableSelfHostAccessIfNeeded() -> Bool {
+        guard AppEnvironment.isSelfHostBuild else {
+            return false
+        }
+
+        customerInfo = nil
+        currentOffering = nil
+        packageOptions = []
+        hasProAccess = true
+        hasCachedOptimisticAccess = true
+        latestPurchaseDate = nil
+        willRenew = false
+        managementURL = nil
+        isLoading = false
+        isPurchasing = false
+        isRestoring = false
+        lastErrorMessage = nil
+        bootstrapState = .ready
+        defaults.removeObject(forKey: Self.cachedStateDefaultsKey)
+        customerInfoUpdatesTask?.cancel()
+        customerInfoUpdatesTask = nil
+        return true
+    }
+
     func startCustomerInfoObserverIfConfigured() {
+        guard !AppEnvironment.isSelfHostBuild else {
+            return
+        }
+
         guard customerInfoUpdatesTask == nil, Purchases.isConfigured else {
             return
         }
@@ -266,6 +318,10 @@ private extension SubscriptionService {
 
     // Rehydrates the last known subscription snapshot so launch and foreground recovery are local-first.
     func restoreCachedStateIfAvailable() {
+        guard !AppEnvironment.isSelfHostBuild else {
+            return
+        }
+
         guard let data = defaults.data(forKey: Self.cachedStateDefaultsKey),
               let cachedState = try? JSONDecoder().decode(CachedSubscriptionState.self, from: data) else {
             return
@@ -280,6 +336,10 @@ private extension SubscriptionService {
     }
 
     func persistCachedState() {
+        guard !AppEnvironment.isSelfHostBuild else {
+            return
+        }
+
         let cachedState = CachedSubscriptionState(
             hasProAccess: hasProAccess,
             latestPurchaseDate: latestPurchaseDate,
