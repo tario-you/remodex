@@ -17,6 +17,7 @@ RELAY_BIND_HOST="${RELAY_BIND_HOST:-0.0.0.0}"
 RELAY_PORT="${RELAY_PORT:-9000}"
 RELAY_HOSTNAME="${RELAY_HOSTNAME:-}"
 RELAY_BRIDGE_HOST=""
+RELAY_PUSH_SERVICE_URL="${REMODEX_PUSH_SERVICE_URL:-}"
 RELAY_PID=""
 BRIDGE_SERVICE_STARTED="false"
 
@@ -261,14 +262,27 @@ start_embedded_relay() {
   RELAY_PORT="${RELAY_PORT}" \
   RELAY_SERVER_MODULE="${RELAY_SERVER_MODULE}" \
   node <<'NODE' &
-const { createRelayServer } = require(process.env.RELAY_SERVER_MODULE);
+const {
+  createRelayServer,
+  readOptionalBooleanEnv,
+} = require(process.env.RELAY_SERVER_MODULE);
 
 const host = process.env.RELAY_BIND_HOST || "0.0.0.0";
 const port = Number.parseInt(process.env.RELAY_PORT || "9000", 10);
-const { server } = createRelayServer();
+const trustProxy = readOptionalBooleanEnv(["REMODEX_TRUST_PROXY", "PHODEX_TRUST_PROXY"]) ?? false;
+const enablePushService = readOptionalBooleanEnv(
+  ["REMODEX_ENABLE_PUSH_SERVICE", "PHODEX_ENABLE_PUSH_SERVICE"]
+) ?? false;
+const { server } = createRelayServer({
+  enablePushService,
+  trustProxy,
+});
 
 server.listen(port, host, () => {
-  console.log(`[relay] listening on http://${host}:${port}`);
+  console.log(
+    `[relay] listening on http://${host}:${port}`
+      + (enablePushService ? " (push enabled)" : "")
+  );
 });
 
 function shutdown(signal) {
@@ -285,6 +299,10 @@ NODE
 }
 
 print_summary() {
+  local push_summary="disabled"
+  if [[ -n "${RELAY_PUSH_SERVICE_URL}" ]]; then
+    push_summary="${RELAY_PUSH_SERVICE_URL}"
+  fi
   cat <<EOF
 [run-local-remodex] Configuration
   Relay bind host : ${RELAY_BIND_HOST}
@@ -293,16 +311,27 @@ print_summary() {
   Bridge host     : ${RELAY_BRIDGE_HOST}
   Bridge relay URL: ws://${RELAY_BRIDGE_HOST}:${RELAY_PORT}/relay
   Public relay URL: ws://${RELAY_HOSTNAME}:${RELAY_PORT}/relay
+  Push service    : ${push_summary}
 EOF
 }
 
 start_bridge() {
   log "Starting bridge"
   cd "${BRIDGE_DIR}"
+  local resolved_push_service_url="${RELAY_PUSH_SERVICE_URL}"
+  if [[ -z "${resolved_push_service_url}" ]]; then
+    local push_enabled="${REMODEX_ENABLE_PUSH_SERVICE:-${PHODEX_ENABLE_PUSH_SERVICE:-}}"
+    case "${push_enabled,,}" in
+      1|true|yes|on)
+        resolved_push_service_url="http://${RELAY_BRIDGE_HOST}:${RELAY_PORT}"
+        ;;
+    esac
+  fi
   # Keep the bridge on loopback for local reliability while advertising the
   # phone-reachable host in the pairing QR payload.
   REMODEX_RELAY="ws://${RELAY_BRIDGE_HOST}:${RELAY_PORT}/relay" \
   REMODEX_PUBLIC_RELAY="ws://${RELAY_HOSTNAME}:${RELAY_PORT}/relay" \
+  REMODEX_PUSH_SERVICE_URL="${resolved_push_service_url}" \
   node ./bin/remodex.js up
   BRIDGE_SERVICE_STARTED="true"
 }
@@ -318,6 +347,13 @@ trap cleanup EXIT INT TERM
 parse_args "$@"
 RELAY_HOSTNAME="$(default_hostname)"
 RELAY_BRIDGE_HOST="$(healthcheck_host)"
+if [[ -z "${RELAY_PUSH_SERVICE_URL}" ]]; then
+  case "${REMODEX_ENABLE_PUSH_SERVICE:-${PHODEX_ENABLE_PUSH_SERVICE:-}}" in
+    1|true|TRUE|yes|YES|on|ON)
+      RELAY_PUSH_SERVICE_URL="http://${RELAY_BRIDGE_HOST}:${RELAY_PORT}"
+      ;;
+  esac
+fi
 
 ensure_prerequisites
 ensure_package_dependencies "${BRIDGE_DIR}"

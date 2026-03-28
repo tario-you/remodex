@@ -4,7 +4,8 @@
 // Set to YES for a local self-host build that skips RevenueCat and the Pro gate.
 REMODEX_SELF_HOST_BUILD = NO
 
-// Optional: point local self-host builds at a minimal entitlements file.
+// Optional: point local self-host builds at a self-host entitlements file.
+// The bundled self-host file keeps APNs enabled while leaving Sign in with Apple out.
 REMODEX_CODE_SIGN_ENTITLEMENTS = CodexMobile/CodexMobile.entitlements
 
 // Optional: prefill a relay URL instead of pasting or scanning one at runtime.
