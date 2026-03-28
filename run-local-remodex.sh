@@ -291,16 +291,19 @@ print_summary() {
   Relay port      : ${RELAY_PORT}
   Relay hostname  : ${RELAY_HOSTNAME}
   Bridge host     : ${RELAY_BRIDGE_HOST}
-  Relay URL       : ws://${RELAY_HOSTNAME}:${RELAY_PORT}/relay
+  Bridge relay URL: ws://${RELAY_BRIDGE_HOST}:${RELAY_PORT}/relay
+  Public relay URL: ws://${RELAY_HOSTNAME}:${RELAY_PORT}/relay
 EOF
 }
 
 start_bridge() {
   log "Starting bridge"
   cd "${BRIDGE_DIR}"
-  # The bridge bakes REMODEX_RELAY into the pairing QR, so advertise the host
-  # the iPhone can actually reach instead of the loopback health-check host.
-  REMODEX_RELAY="ws://${RELAY_HOSTNAME}:${RELAY_PORT}/relay" node ./bin/remodex.js up
+  # Keep the bridge on loopback for local reliability while advertising the
+  # phone-reachable host in the pairing QR payload.
+  REMODEX_RELAY="ws://${RELAY_BRIDGE_HOST}:${RELAY_PORT}/relay" \
+  REMODEX_PUBLIC_RELAY="ws://${RELAY_HOSTNAME}:${RELAY_PORT}/relay" \
+  node ./bin/remodex.js up
   BRIDGE_SERVICE_STARTED="true"
 }
 

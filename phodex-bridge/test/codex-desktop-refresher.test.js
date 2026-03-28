@@ -95,6 +95,7 @@ test("readBridgeConfig keeps safe defaults and explicit overrides", () => {
   });
   assert.equal(macConfig.refreshEnabled, false);
   assert.equal(macConfig.relayUrl, "");
+  assert.equal(macConfig.publicRelayUrl, "");
   assert.equal(macConfig.pushServiceUrl, "");
   assert.equal(macEndpointConfig.refreshEnabled, false);
   assert.equal(linuxConfig.refreshEnabled, false);
@@ -120,6 +121,7 @@ test("readBridgeConfig uses only the packaged relay default outside a source che
   });
 
   assert.equal(config.relayUrl, "wss://relay.example/relay");
+  assert.equal(config.publicRelayUrl, "wss://relay.example/relay");
   assert.equal(config.pushServiceUrl, "");
 });
 
@@ -143,6 +145,7 @@ test("readBridgeConfig uses a packaged push default only when it is explicitly p
   });
 
   assert.equal(config.relayUrl, "wss://relay.example/relay");
+  assert.equal(config.publicRelayUrl, "wss://relay.example/relay");
   assert.equal(config.pushServiceUrl, "https://relay.example");
 });
 
@@ -158,6 +161,7 @@ test("readBridgeConfig does not use the hosted fallback inside a source checkout
   });
 
   assert.equal(config.relayUrl, "");
+  assert.equal(config.publicRelayUrl, "");
   assert.equal(config.pushServiceUrl, "");
 });
 
@@ -196,7 +200,26 @@ test("readBridgeConfig disables managed push defaults when a self-hosted relay o
   });
 
   assert.equal(config.relayUrl, "wss://self-host.example/relay");
+  assert.equal(config.publicRelayUrl, "wss://self-host.example/relay");
   assert.equal(config.pushServiceUrl, "");
+});
+
+test("readBridgeConfig keeps a separate public relay override for pairing payloads", () => {
+  const config = readBridgeConfig({
+    env: {
+      REMODEX_RELAY: "ws://127.0.0.1:9000/relay",
+      REMODEX_PUBLIC_RELAY: "ws://10.0.0.55:9000/relay",
+    },
+    runtimeRoot: "/workspace/phodex-bridge",
+    fsImpl: {
+      existsSync(targetPath) {
+        return targetPath === "/workspace/.git";
+      },
+    },
+  });
+
+  assert.equal(config.relayUrl, "ws://127.0.0.1:9000/relay");
+  assert.equal(config.publicRelayUrl, "ws://10.0.0.55:9000/relay");
 });
 
 test("thread/start falls back once to the new-thread route when thread id is still unknown", async () => {
