@@ -46,3 +46,6 @@ $TMP_PLACEHOLDER
 
 # VS Code
 .vscode/
+
+
+.derived/
