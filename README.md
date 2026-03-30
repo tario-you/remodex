@@ -169,6 +169,15 @@ If pairing fails on iPhone:
 ipconfig getifaddr en0 || ipconfig getifaddr en1
 ```
 
+If you want to keep that value in your local ignored `.env`, add `LAN_IP=...` there and run:
+
+```sh
+set -a
+source .env
+set +a
+./run-local-remodex.sh --hostname "$LAN_IP"
+```
+
 ## Custom Relay Endpoint
 
 For a full public self-hosting walkthrough, see [`Docs/self-hosting.md`](Docs/self-hosting.md).
