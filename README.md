@@ -122,6 +122,8 @@ Install the bridge, then run:
 remodex up
 ```
 
+If you are running from a source checkout and did not install the npm package globally, `remodex up` will not exist in your shell yet. In that case use `./run-local-remodex.sh` from the repo root, or install `remodex` globally with `npm install -g remodex@latest`.
+
 On first connect, open the Remodex app, follow the onboarding flow, then scan the QR code from inside the app.
 
 After that first scan:
@@ -151,6 +153,21 @@ Options:
 - `./run-local-remodex.sh --bind-host 127.0.0.1 --port 9100`
 
 If your iPhone is pairing over LAN, use a hostname or IP the phone can actually reach.
+
+If pairing fails on iPhone:
+
+1. Tap `Forget Pair` in the app.
+2. Rerun the launcher with a concrete LAN IP instead of relying on `.local`, for example `./run-local-remodex.sh --hostname <lan-ip>`.
+3. Keep that terminal open.
+4. In the app, use `Scan New QR Code` rather than `Reconnect`.
+
+`Reconnect` reuses the saved relay URL and session from the previous scan, so it will keep retrying the old host until you scan a fresh QR. Also make sure `Settings > Remodex > Local Network` is enabled on the iPhone.
+
+`<lan-ip>` means your Mac's current IPv4 address on the same local network as the iPhone. On macOS, you can usually get it with:
+
+```sh
+ipconfig getifaddr en0 || ipconfig getifaddr en1
+```
 
 ## Custom Relay Endpoint
 

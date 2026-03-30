@@ -321,7 +321,9 @@ start_bridge() {
   local resolved_push_service_url="${RELAY_PUSH_SERVICE_URL}"
   if [[ -z "${resolved_push_service_url}" ]]; then
     local push_enabled="${REMODEX_ENABLE_PUSH_SERVICE:-${PHODEX_ENABLE_PUSH_SERVICE:-}}"
-    case "${push_enabled,,}" in
+    local normalized_push_enabled
+    normalized_push_enabled="$(printf '%s' "${push_enabled}" | tr '[:upper:]' '[:lower:]')"
+    case "${normalized_push_enabled}" in
       1|true|yes|on)
         resolved_push_service_url="http://${RELAY_BRIDGE_HOST}:${RELAY_PORT}"
         ;;

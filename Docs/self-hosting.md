@@ -72,6 +72,8 @@ Pass a hostname or IP address that the phone can actually reach:
 ./run-local-remodex.sh --hostname 192.168.1.10
 ```
 
+If you are running from a source checkout and `remodex up` is not installed globally, that is expected. Use `./run-local-remodex.sh` from the repo root, or install the npm package globally with `npm install -g remodex@latest`.
+
 ### Health check
 
 By default the local relay listens on port `9000`.
@@ -243,6 +245,65 @@ That usually means one of these:
 - the public path is wrong
 - the reverse proxy is not forwarding upgrades
 - the bridge is pointing at the wrong relay base URL
+
+## Audited Learnings From The 2026-03 LAN Pairing Debug
+
+This section captures the specific local-source and iPhone-pairing failure mode that was debugged in the public repo, along with the source files that were audited to verify each conclusion.
+
+### Audited sources
+
+- [`../run-local-remodex.sh`](../run-local-remodex.sh)
+- [`../CodexMobile/CodexMobile/Services/CodexService+SecureTransport.swift`](../CodexMobile/CodexMobile/Services/CodexService+SecureTransport.swift)
+- [`../CodexMobile/CodexMobile/Views/Home/ContentViewModel.swift`](../CodexMobile/CodexMobile/Views/Home/ContentViewModel.swift)
+- [`../CodexMobile/CodexMobile/Services/CodexService+Connection.swift`](../CodexMobile/CodexMobile/Services/CodexService+Connection.swift)
+- [`../phodex-bridge/src/secure-transport.js`](../phodex-bridge/src/secure-transport.js)
+
+### What changed
+
+- `run-local-remodex.sh` was made compatible with the stock macOS `/bin/bash` by replacing the Bash 4-only `${var,,}` lowercase expansion with a portable `tr` normalization step.
+- The README and this guide now document the source-checkout path explicitly so `remodex up` is not assumed to exist before `npm install -g remodex@latest`.
+- The local-LAN recovery flow now calls out that switching to a concrete LAN IP requires a fresh QR scan, not just tapping `Reconnect`.
+
+### What worked
+
+- Fixing the Bash portability issue let the launcher reach the QR-printing stage again on macOS without requiring Homebrew Bash.
+- Rerunning the launcher with `--hostname <lan-ip>` produced a QR whose advertised relay URL uses a concrete host the iPhone can reach directly.
+- Using `Scan New QR Code` after changing the hostname forced the iPhone to save the new relay URL and session instead of retrying the old one.
+
+### What did not work
+
+- Re-running the launcher with the default `.local` hostname did not address the iPhone reachability problem.
+- Tapping `Reconnect` after the relay host changed did not help, because the app reuses the saved relay URL and session from the previous QR scan.
+- Fixing only the launcher crash did not fix pairing by itself; it only removed the first blocker and exposed the next one.
+
+### Why the previous fix did not fully solve the problem
+
+The first fix addressed a shell compatibility bug in the launcher. It made `./run-local-remodex.sh` start the relay and print the QR again, but it did not change the advertised relay hostname inside that QR.
+
+The audited app-side code shows why that matters:
+
+- the launcher writes `REMODEX_PUBLIC_RELAY` into the QR payload
+- the iPhone saves that scanned relay URL and session when pairing
+- later `Reconnect` attempts prefer the saved/trusted session path and fall back to the saved QR session
+
+So the real transport issue remained until the QR was regenerated with a concrete LAN IP and the iPhone scanned that new QR.
+
+### Recommended recovery flow for this failure mode
+
+1. Start the local launcher with a concrete host the phone can reach, for example `./run-local-remodex.sh --hostname 192.168.1.10`.
+2. Keep the terminal open after the QR is printed.
+3. On the iPhone, tap `Forget Pair`.
+4. Confirm `Settings > Remodex > Local Network` is enabled.
+5. Use `Scan New QR Code`.
+6. Only use `Reconnect` after a successful scan has already saved the correct relay URL.
+
+### How to avoid this debugging loop next time
+
+- Separate launcher failures from transport failures. If the script does not reach the QR, fix that first before reasoning about iPhone networking.
+- When testing LAN pairing on iPhone, prefer a concrete LAN IP first and treat `.local` as a convenience path, not the most reliable baseline.
+- After changing `--hostname`, always rescan a fresh QR. Do not assume `Reconnect` will pick up the new host automatically.
+- Capture the Mac terminal logs immediately after scanning. The most useful lines are the relay connection line and any secure-handshake lines from the bridge. Redact live session IDs before sharing logs.
+- If local Wi-Fi remains flaky even with a concrete LAN IP and a healthy relay, move to a Tailscale-reachable relay instead of continuing to iterate on plain local `ws://`.
 
 ## Minimal Summary
 
