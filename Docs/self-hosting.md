@@ -246,6 +246,22 @@ That usually means one of these:
 - the reverse proxy is not forwarding upgrades
 - the bridge is pointing at the wrong relay base URL
 
+### The phone shows fewer models than Codex desktop
+
+Check the backend that Remodex is actually using before changing the iPhone app:
+
+- the iPhone loads models from `model/list`
+- the bridge usually spawns a local `codex app-server`
+- an older or different local Codex CLI can expose a smaller model catalog than the desktop app UI
+
+Start with:
+
+```sh
+codex --version
+```
+
+Then restart the bridge after any CLI update so a newly spawned `codex app-server` picks up the newer binary.
+
 ## Audited Learnings From The 2026-03 LAN Pairing Debug
 
 This section captures the specific local-source and iPhone-pairing failure mode that was debugged in the public repo, along with the source files that were audited to verify each conclusion.
@@ -304,6 +320,61 @@ So the real transport issue remained until the QR was regenerated with a concret
 - After changing `--hostname`, always rescan a fresh QR. Do not assume `Reconnect` will pick up the new host automatically.
 - Capture the Mac terminal logs immediately after scanning. The most useful lines are the relay connection line and any secure-handshake lines from the bridge. Redact live session IDs before sharing logs.
 - If local Wi-Fi remains flaky even with a concrete LAN IP and a healthy relay, move to a Tailscale-reachable relay instead of continuing to iterate on plain local `ws://`.
+
+## Audited Learnings From The 2026-03 Runtime Model Catalog Debug
+
+This section captures the separate failure mode where the iPhone showed fewer models than Codex on the Mac. The root cause was not in the iPhone picker UI. It was the backend runtime that the bridge had spawned.
+
+### Audited sources
+
+- [`../CodexMobile/CodexMobile/Services/CodexService+RuntimeConfig.swift`](../CodexMobile/CodexMobile/Services/CodexService+RuntimeConfig.swift)
+- [`../phodex-bridge/src/codex-transport.js`](../phodex-bridge/src/codex-transport.js)
+- local verification with `codex --version`
+- local verification by querying `model/list` from a spawned `codex app-server`
+
+### What changed
+
+- The local Codex CLI on the Mac was updated from `codex-cli 0.72.0` to `codex-cli 0.117.0` through the Bun-managed `@openai/codex` install.
+- The bridge service was restarted so its spawned `codex app-server` used the updated CLI instead of the older binary that had been running before.
+- This guide now documents the backend-first check so future debugging starts with the runtime catalog instead of the mobile UI.
+
+### What worked
+
+- Checking [`../CodexMobile/CodexMobile/Services/CodexService+RuntimeConfig.swift`](../CodexMobile/CodexMobile/Services/CodexService+RuntimeConfig.swift) confirmed that the phone loads its picker from `model/list` with `includeHidden: false`. That ruled out the theory that the iPhone app was hardcoding a smaller model list.
+- Checking [`../phodex-bridge/src/codex-transport.js`](../phodex-bridge/src/codex-transport.js) confirmed that the bridge normally spawns `codex app-server` locally unless an explicit endpoint override is configured. That identified the real backend to inspect.
+- Querying the spawned `codex app-server` directly before and after the CLI update showed the real difference: the older runtime did not advertise `gpt-5.4`, while the updated runtime did.
+- Restarting the bridge after updating the CLI made the new catalog visible to Remodex.
+
+### What did not work
+
+- Debugging the model picker as if it were a phone-only UI problem did not help.
+- Comparing only against the desktop app UI did not identify the real issue, because the desktop app and the bridge do not have to be using the exact same runtime binary or process.
+- Fixing pairing and transport issues alone did not make `gpt-5.4` appear, because the spawned Codex runtime was still older.
+
+### Why the previous fixes did not fully solve the problem
+
+The earlier fixes were still correct, but they solved different layers:
+
+- the launcher fix solved a macOS shell compatibility bug
+- the LAN-IP + fresh-QR fix solved a transport reachability problem between iPhone and relay
+
+Neither of those changes altered the model catalog exposed by `codex app-server`. Remodex was still talking to an older local Codex CLI, so the phone could reconnect successfully and still not see `gpt-5.4`.
+
+### Recommended recovery flow for this failure mode
+
+1. Check the local runtime version with `codex --version`.
+2. If the version is old, update the local CLI, for example `bun add -g @openai/codex@latest` if `codex` is Bun-installed.
+3. Restart the bridge or daemon so it spawns a fresh `codex app-server` from the updated CLI.
+4. Reconnect the phone to that restarted bridge.
+5. If the app is still pinned to an older stopped session, use `Scan New QR Code` and pair against the fresh bridge session.
+
+### How to avoid this debugging loop next time
+
+- Debug from the backend forward, not from the picker backward.
+- Treat the output of `model/list` from the actual runtime behind the bridge as the source of truth.
+- Verify `codex --version` on the Mac before assuming the phone app is missing models.
+- After updating the local Codex CLI, always restart the bridge. A long-lived bridge can keep serving the old runtime until it is relaunched.
+- Only investigate the iPhone UI after the backend runtime has been verified to advertise the expected model IDs.
 
 ## Minimal Summary
 
